@@ -63,6 +63,11 @@ pub struct Progress {
     pub num_files: usize,
     /// Estimated time remaining for the transfer, in seconds
     pub eta: usize,
+    /// Current transfer speed, in bytes per second (over a short sliding
+    /// window)
+    pub current_speed: usize,
+    /// Average transfer speed since the start of the run, in bytes per second
+    pub average_speed: usize,
 }
 
 /// Trait for implementing rusync progress details

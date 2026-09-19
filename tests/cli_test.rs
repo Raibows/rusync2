@@ -227,6 +227,21 @@ fn progress_is_shown_at_every_stage() {
         "summary missing, stdout was: {}",
         stdout
     );
+    assert!(
+        stdout.contains("B/s"),
+        "speed display missing, stdout was: {}",
+        stdout
+    );
+    assert!(
+        stdout.contains("avg "),
+        "average speed display missing, stdout was: {}",
+        stdout
+    );
+    assert!(
+        stdout.contains("(avg"),
+        "average speed missing from the summary, stdout was: {}",
+        stdout
+    );
     // Second run, everything up to date: the header, the scanning line
     // and the per-file progress are still displayed:
     let output = rusync(&[src_str, dest_str]);

@@ -132,16 +132,23 @@ impl ProgressInfo for ConsoleProgressInfo {
             return;
         }
         let eta_str = human_seconds(progress.eta);
+        let speed_str = human_speed(progress.current_speed);
+        let avg_str = format!("avg {}", human_speed(progress.average_speed));
         let percent_width = 3;
         let eta_width = eta_str.len();
+        let speed_width = speed_str.len();
+        let avg_width = avg_str.len();
         let index = progress.index;
         let index_width = index.to_string().len();
         let num_files = progress.num_files;
         let num_files_width = num_files.to_string().len();
-        let widgets_width = percent_width + index_width + num_files_width + eta_width;
-        let num_separators = 5;
+        let widgets_width =
+            percent_width + index_width + num_files_width + eta_width + speed_width + avg_width;
+        let num_separators = 7;
         let line_width = get_terminal_width();
-        let file_width = line_width - widgets_width - num_separators - 1;
+        let file_width = line_width
+            .saturating_sub(widgets_width + num_separators + 1)
+            .max(8);
         let current_file = progress.current_file.clone();
         let current_file = truncate_lossy(&current_file, file_width);
         let current_file = format!(
@@ -151,8 +158,8 @@ impl ProgressInfo for ConsoleProgressInfo {
         );
         let file_percent = (progress.file_done * 100) / progress.file_size.max(1);
         print!(
-            "{:>3}% {}/{} {} {:<}\r",
-            file_percent, index, num_files, current_file, eta_str
+            "{:>3}% {}/{} {} {} {} {}\r",
+            file_percent, index, num_files, current_file, speed_str, avg_str, eta_str
         );
         let _ = io::stdout().flush();
         self.line_dirty = true;
@@ -189,10 +196,16 @@ impl ProgressInfo for ConsoleProgressInfo {
         // We know transfered cannot be negative
         let transfered = transfered.file_size(options::DECIMAL).unwrap();
         let duration = stats.duration();
+        let average = average_speed(stats.total_transfered, duration);
         // Truncate below 1 second
         let duration = std::time::Duration::from_secs(duration.as_secs());
         let duration = humantime::format_duration(duration);
-        println!("{} copied in {}", transfered, duration);
+        println!(
+            "{} copied in {} (avg {})",
+            transfered,
+            duration,
+            human_speed(average)
+        );
         if stats.errors != 0 {
             eprintln!("{} errors occurred", stats.errors);
         }
@@ -278,6 +291,26 @@ fn scanning_line(info: &WalkInfo) -> String {
     line
 }
 
+/// Format a speed in bytes per second.
+fn human_speed(bytes_per_second: usize) -> String {
+    format!(
+        "{}/s",
+        bytes_per_second
+            .file_size(options::DECIMAL)
+            .unwrap_or_default()
+    )
+}
+
+/// Average speed in bytes per second over the given duration.
+fn average_speed(total_done: u64, elapsed: std::time::Duration) -> usize {
+    let secs = elapsed.as_secs_f64();
+    if secs > 0.0 {
+        (total_done as f64 / secs) as usize
+    } else {
+        0
+    }
+}
+
 fn get_terminal_width() -> usize {
     if let Some((Width(w), _)) = terminal_size() {
         return w as usize;
@@ -357,6 +390,13 @@ mod test {
         assert_eq!("00:03:05", human_seconds(185));
         assert_eq!("02:04:05", human_seconds(7445));
         assert_eq!("200:00:02", human_seconds(720_002));
+    }
+
+    #[test]
+    fn test_human_speed() {
+        assert_eq!(human_speed(0), "0 B/s");
+        assert_eq!(human_speed(1024), "1.02 KB/s");
+        assert_eq!(human_speed(12500000), "12.50 MB/s");
     }
 
     #[test]

@@ -1,3 +1,14 @@
+# 0.10.0
+
+* Show the current transfer speed and the average speed since the start
+  of the run in the progress line, and the average speed in the final
+  summary (`40 KB copied in 2s (avg 20 B/s)`). The current speed is
+  computed over a 2-second sliding window and decays to 0 when nothing
+  is transferred.
+
+* For library users: the `Progress` struct gained `current_speed` and
+  `average_speed` fields, in bytes per second.
+
 # 0.9.0
 
 * Show progress at every stage: a scanning line while the source tree is
