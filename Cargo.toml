@@ -1,6 +1,6 @@
 [package]
 name = "rusync2"
-version = "0.8.0"
+version = "0.9.0"
 authors = ["Dimitri Merejkowsky <dimitri@dmerej.info>", "Raibows <lukcychizuo@gmail.com>"]
 
 readme = "README.md"
