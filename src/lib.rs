@@ -30,12 +30,16 @@
 //! ```
 //!
 pub mod console_info;
+mod duration;
 mod entry;
+mod filters;
 mod fsops;
 pub mod progress;
 pub mod sync;
 mod workers;
 pub use crate::console_info::ConsoleProgressInfo;
+pub use crate::duration::parse_duration;
+pub use crate::filters::Filters;
 pub use crate::sync::Stats;
 pub use crate::sync::SyncOptions;
 pub use crate::sync::Syncer;

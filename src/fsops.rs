@@ -25,8 +25,13 @@ pub enum SyncOutcome {
 }
 
 pub fn get_rel_path(a: &Path, b: &Path) -> PathBuf {
-    pathdiff::diff_paths(a, b)
-        .expect("called get_rel_path on two absolute paths '{}' and '{}', a, b")
+    pathdiff::diff_paths(a, b).unwrap_or_else(|| {
+        panic!(
+            "could not compute relative path from '{}' to '{}'",
+            a.display(),
+            b.display()
+        )
+    })
 }
 
 fn is_more_recent_than(src: &Entry, dest: &Entry) -> bool {

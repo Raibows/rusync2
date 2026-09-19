@@ -75,6 +75,7 @@ fn new_test_syncer(src: &Path, dest: &Path) -> rusync::Syncer {
     let dummy_progress_info = DummyProgressInfo {};
     let options = rusync::SyncOptions {
         preserve_permissions: true,
+        ..Default::default()
     };
     rusync::Syncer::new(src, dest, options, Box::new(dummy_progress_info))
 }
@@ -132,6 +133,7 @@ fn do_not_preserve_permissions() -> Result<(), std::io::Error> {
     let (src_path, dest_path) = setup_test(tmp_dir.path());
     let options = rusync::SyncOptions {
         preserve_permissions: false,
+        ..Default::default()
     };
     let syncer = rusync::Syncer::new(
         &src_path,

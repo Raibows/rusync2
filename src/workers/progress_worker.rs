@@ -51,6 +51,13 @@ impl ProgressWorker {
                     self.progress_info.error(&entry, &details);
                     stats.add_error();
                 }
+                ProgressMessage::Excluded { is_dir } => {
+                    if is_dir {
+                        stats.excluded_dirs += 1;
+                    } else {
+                        stats.excluded_files += 1;
+                    }
+                }
                 ProgressMessage::Syncing { done, size, .. } => {
                     file_done += done;
                     total_done += done;

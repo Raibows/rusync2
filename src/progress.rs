@@ -18,6 +18,9 @@ pub enum ProgressMessage {
         entry: String,
         details: String,
     },
+    Excluded {
+        is_dir: bool,
+    },
 }
 
 pub struct Progress {

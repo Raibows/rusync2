@@ -11,6 +11,9 @@ use std::fs::OpenOptions;
 use std::io;
 use std::io::Write;
 use std::path::Path;
+use std::thread;
+use std::time::Duration;
+use std::time::Instant;
 use terminal_size::{terminal_size, Width};
 
 #[derive(Debug)]
@@ -27,6 +30,7 @@ impl ConsoleProgressInfo {
         let err_file = OpenOptions::new()
             .create(true)
             .write(true)
+            .truncate(false)
             .open(error_list_path)
             .with_context(|| {
                 format!("Could not open errfile at '{}'", error_list_path.display())
@@ -66,10 +70,10 @@ impl ProgressInfo for ConsoleProgressInfo {
         let line_width = get_terminal_width();
         let file_width = line_width - widgets_width - num_separators - 1;
         let current_file = progress.current_file.clone();
-        let current_file = truncate_lossy(&current_file, file_width as usize);
+        let current_file = truncate_lossy(&current_file, file_width);
         let current_file = format!(
             "{filename:<pad$}",
-            pad = file_width as usize,
+            pad = file_width,
             filename = current_file
         );
         let file_percent = (progress.file_done * 100) / progress.file_size;
@@ -101,6 +105,12 @@ impl ProgressInfo for ConsoleProgressInfo {
             "{} files copied, {} symlinks created, {} symlinks updated",
             stats.copied, stats.symlink_created, stats.symlink_updated
         );
+        if stats.excluded_files > 0 || stats.excluded_dirs > 0 {
+            println!(
+                "{} files skipped by filters ({} directories pruned)",
+                stats.excluded_files, stats.excluded_dirs
+            );
+        }
         let transfered = stats.total_transfered;
         // We know transfered cannot be negative
         let transfered = transfered.file_size(options::DECIMAL).unwrap();
@@ -119,6 +129,64 @@ impl Default for ConsoleProgressInfo {
     fn default() -> Self {
         Self::new()
     }
+}
+
+/// Print the time the sync completed and the time of the next sync, in watch
+/// mode (see the `--sleep-interval` option).
+pub fn announce_next_sync(finished_at: &str, next_sync_at: &str) {
+    println!(
+        "{} Sync completed at {}, next sync at {}",
+        "::".color("blue"),
+        finished_at.bold(),
+        next_sync_at.bold()
+    );
+}
+
+/// One line of the progress bar displayed while sleeping between two syncs.
+pub fn sleep_progress_line(
+    elapsed_secs: u64,
+    total_secs: u64,
+    next_sync_at: &str,
+    bar_width: usize,
+) -> String {
+    // The interval is at least one second, so this is never zero:
+    let total = total_secs.max(1) as u128;
+    let elapsed = elapsed_secs as u128;
+    let percent = (elapsed * 100 / total) as u64;
+    let filled = ((elapsed * bar_width as u128 / total) as usize).min(bar_width);
+    let mut bar = String::new();
+    for i in 0..bar_width {
+        if i < filled {
+            bar.push('#');
+        } else {
+            bar.push('.');
+        }
+    }
+    format!(
+        "waiting [{}] {:>3}% ({}/{}) next sync at {}",
+        bar,
+        percent,
+        human_seconds(elapsed_secs as usize),
+        human_seconds(total_secs as usize),
+        next_sync_at
+    )
+}
+
+/// Sleep for `interval`, refreshing `sleep_progress_line` while waiting.
+pub fn sleep_with_progress(interval: Duration, next_sync_at: &str) {
+    let start = Instant::now();
+    let total = interval.as_secs().max(1);
+    loop {
+        let elapsed = start.elapsed();
+        if elapsed >= interval {
+            break;
+        }
+        let line = sleep_progress_line(elapsed.as_secs(), total, next_sync_at, 10);
+        print!("{}\r", line);
+        let _ = io::stdout().flush();
+        thread::sleep(Duration::from_secs(1));
+    }
+    erase_line();
 }
 
 fn get_terminal_width() -> usize {
@@ -173,5 +241,50 @@ mod test {
         assert_eq!("00:03:05", human_seconds(185));
         assert_eq!("02:04:05", human_seconds(7445));
         assert_eq!("200:00:02", human_seconds(720_002));
+    }
+
+    #[test]
+    fn sleep_progress_line_at_start() {
+        let line = sleep_progress_line(0, 60, "2026-08-20 17:32:00", 10);
+        assert_eq!(
+            line,
+            "waiting [..........]   0% (00:00:00/00:01:00) next sync at 2026-08-20 17:32:00"
+        );
+    }
+
+    #[test]
+    fn sleep_progress_line_half_way() {
+        let line = sleep_progress_line(30, 60, "2026-08-20 17:32:00", 10);
+        assert_eq!(
+            line,
+            "waiting [#####.....]  50% (00:00:30/00:01:00) next sync at 2026-08-20 17:32:00"
+        );
+    }
+
+    #[test]
+    fn sleep_progress_line_rounds_the_bar_down() {
+        let line = sleep_progress_line(45, 120, "2026-08-20 17:32:00", 4);
+        assert_eq!(
+            line,
+            "waiting [#...]  37% (00:00:45/00:02:00) next sync at 2026-08-20 17:32:00"
+        );
+    }
+
+    #[test]
+    fn sleep_progress_line_complete() {
+        let line = sleep_progress_line(60, 60, "2026-08-20 17:32:00", 10);
+        assert_eq!(
+            line,
+            "waiting [##########] 100% (00:01:00/00:01:00) next sync at 2026-08-20 17:32:00"
+        );
+    }
+
+    #[test]
+    fn sleep_progress_line_uses_hours() {
+        let line = sleep_progress_line(0, 24 * 3600, "2026-08-21 17:32:00", 10);
+        assert_eq!(
+            line,
+            "waiting [..........]   0% (00:00:00/24:00:00) next sync at 2026-08-21 17:32:00"
+        );
     }
 }

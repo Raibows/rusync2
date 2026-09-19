@@ -6,6 +6,7 @@ use std::thread;
 use anyhow::{anyhow, Error};
 
 use crate::entry::Entry;
+use crate::filters::Filters;
 use crate::fsops;
 use crate::fsops::SyncOutcome::*;
 use crate::progress::{ProgressInfo, ProgressMessage};
@@ -15,7 +16,7 @@ use crate::workers::WalkWorker;
 
 #[derive(Debug)]
 pub struct Stats {
-    /// Number of files in the source
+    /// Number of files in the source that pass the filters
     pub num_files: u64,
     /// Sum of the sizes of all the files in the source
     pub total_size: usize,
@@ -31,6 +32,12 @@ pub struct Stats {
     pub copied: u64,
     /// Number of errors
     pub errors: u64,
+
+    /// Number of files excluded by the include/exclude filters
+    pub excluded_files: u64,
+    /// Number of directories pruned by the exclude filters (not descended
+    /// into)
+    pub excluded_dirs: u64,
 
     /// Number of symlink created in the destination folder
     pub symlink_created: u64,
@@ -55,6 +62,8 @@ impl Stats {
             up_to_date: 0,
             copied: 0,
             errors: 0,
+            excluded_files: 0,
+            excluded_dirs: 0,
 
             symlink_created: 0,
             symlink_updated: 0,
@@ -95,16 +104,20 @@ impl Stats {
     }
 }
 
-#[derive(Copy, Clone)]
+#[derive(Clone)]
 pub struct SyncOptions {
     /// Wether to preserve permissions of the source file after the destination is written.
     pub preserve_permissions: bool,
+    /// Include and exclude rules, matched against paths relative to the
+    /// source directory
+    pub filters: Filters,
 }
 
 impl Default for SyncOptions {
     fn default() -> Self {
         Self {
             preserve_permissions: true,
+            filters: Filters::default(),
         }
     }
 }
@@ -136,7 +149,12 @@ impl Syncer {
         let (walker_stats_output, progress_input) = channel::<ProgressMessage>();
         let progress_output = walker_stats_output.clone();
 
-        let walk_worker = WalkWorker::new(&self.source, walker_entry_output, walker_stats_output);
+        let walk_worker = WalkWorker::new(
+            &self.source,
+            walker_entry_output,
+            walker_stats_output,
+            self.options.filters.clone(),
+        );
         let sync_worker = SyncWorker::new(
             &self.source,
             &self.destination,

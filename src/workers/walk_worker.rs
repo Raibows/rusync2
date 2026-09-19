@@ -7,6 +7,7 @@ use std::sync::mpsc::Sender;
 use anyhow::{bail, Context, Error};
 
 use crate::entry::Entry;
+use crate::filters::Filters;
 use crate::fsops;
 use crate::progress::ProgressMessage;
 
@@ -14,6 +15,7 @@ pub struct WalkWorker {
     entry_output: Sender<Entry>,
     progress_output: Sender<ProgressMessage>,
     source: PathBuf,
+    filters: Filters,
 }
 
 impl WalkWorker {
@@ -21,12 +23,24 @@ impl WalkWorker {
         source: &Path,
         entry_output: Sender<Entry>,
         progress_output: Sender<ProgressMessage>,
+        filters: Filters,
     ) -> WalkWorker {
         WalkWorker {
             entry_output,
             progress_output,
             source: source.to_path_buf(),
+            filters,
         }
+    }
+
+    fn send_excluded(&self, is_dir: bool) -> Result<(), Error> {
+        let sent = self
+            .progress_output
+            .send(ProgressMessage::Excluded { is_dir });
+        if sent.is_err() {
+            bail!("stats output chan is closed");
+        }
+        Ok(())
     }
 
     fn walk(&self) -> Result<(), Error> {
@@ -50,10 +64,19 @@ impl WalkWorker {
                     )
                 })?;
                 let path = entry.path();
+                let rel_path = fsops::get_rel_path(&path, &self.source);
                 if path.is_dir() {
+                    if self.filters.dir_pruned(&rel_path) {
+                        self.send_excluded(true)?;
+                        continue;
+                    }
                     subdirs.push(path);
                 } else {
-                    let meta = self.process_file(&entry)?;
+                    if !self.filters.passes(&rel_path) {
+                        self.send_excluded(false)?;
+                        continue;
+                    }
+                    let meta = self.process_file(&rel_path, &entry)?;
                     num_files += 1;
                     total_size += meta.len();
                     let sent = self.progress_output.send(ProgressMessage::Todo {
@@ -69,8 +92,7 @@ impl WalkWorker {
         Ok(())
     }
 
-    fn process_file(&self, entry: &DirEntry) -> Result<fs::Metadata, Error> {
-        let rel_path = fsops::get_rel_path(&entry.path(), &self.source);
+    fn process_file(&self, rel_path: &Path, entry: &DirEntry) -> Result<fs::Metadata, Error> {
         let desc = rel_path.to_string_lossy();
         let src_entry = Entry::new(&desc, &entry.path());
         let metadata = src_entry

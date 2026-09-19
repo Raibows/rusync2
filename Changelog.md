@@ -1,3 +1,25 @@
+# Unreleased
+
+* Add `--include` and `--exclude` options. Both take regular expressions, can
+  be repeated, and are matched against the path relative to the source
+  directory (components joined by `/`). If any `--include` is given, only
+  matching paths are synchronized; `--exclude` always takes precedence.
+  Directories matching an exclude pattern are not descended into.
+
+  For library users, `SyncOptions` gained a `filters` field, so struct
+  literal constructions need updating (or use `..Default::default()`);
+  `SyncOptions` is no longer `Copy`.
+
+* Add a `--sleep-interval` option: after each sync, sleep for the given
+  interval, then sync again until interrupted. Plain numbers mean seconds;
+  suffixes `s`, `m`, `h`, `d` and combinations like `1h30m` are supported.
+  While waiting, `rusync` prints the time the sync completed, the time of
+  the next sync, and a progress bar.
+
+* `rusync --help` and `rusync -h` now describe the program, the
+  source/destination arguments, and the path matching and watch mode
+  semantics.
+
 # 0.7.2
 
 * Update dependencies
