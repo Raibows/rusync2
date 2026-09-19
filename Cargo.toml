@@ -1,18 +1,22 @@
 [package]
-name = "rusync"
-version = "0.7.2"
-authors = ["Dimitri Merejkowsky <dimitri@dmerej.info>"]
+name = "rusync2"
+version = "0.8.0"
+authors = ["Dimitri Merejkowsky <dimitri@dmerej.info>", "Raibows <lukcychizuo@gmail.com>"]
 
 readme = "README.md"
-description = "Minimalist rsync clone in Rust"
+description = "Maintained fork of rusync: adds --include/--exclude filters and a --sleep-interval watch mode"
 license = "BSD-3-Clause"
 
 keywords = ["rsync"]
 categories = ["command-line-utilities"]
 
-repository = "https://github.com/dmerejkowsky/rusync"
+repository = "https://github.com/Raibows/rusync2"
 
 edition = "2021"
+
+# The library keeps the original `rusync` name:
+[lib]
+name = "rusync"
 
 [dependencies]
 anyhow = "1.0.58"

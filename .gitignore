@@ -5,3 +5,6 @@ test/
 dest/
 
 .rusync.errlist
+
+# local agent session state
+.pi/

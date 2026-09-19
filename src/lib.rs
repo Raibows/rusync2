@@ -29,6 +29,7 @@
 //! }
 //! ```
 //!
+pub mod cli;
 pub mod console_info;
 mod duration;
 mod entry;

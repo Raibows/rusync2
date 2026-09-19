@@ -1,17 +1,16 @@
-# rusync
-
-<a href="https://crates.io/crates/rusync"><img src="https://img.shields.io/crates/v/rusync.svg"/></a>
-<a href="https://github.com/dmerejkowsky/rusync/actions"><img src="https://github.com/dmerejkowsky/rusync/workflows/Run%20tests/badge.svg"/></a>
-<a href="https://github.com/dmerejkowsky/rusync/actions"><img src="https://github.com/dmerejkowsky/rusync/workflows/Run%20linters/badge.svg"/></a>
-<a href="https://github.com/dmerejkowsky/rusync/actions"><img src="https://github.com/dmerejkowsky/rusync/workflows/Audit%20dependencies/badge.svg"/></a>
-
+# rusync2
 
 Minimalist `rsync` implementation in Rust.
+
+This is a maintained fork of the unmaintained
+[dmerejkowsky/rusync](https://github.com/dmerejkowsky/rusync). The package
+is published to crates.io as `rusync2` and installs both the `rusync` and
+the `rusync2` commands.
 
 # Usage
 
 ```
-$ cargo install rusync
+$ cargo install rusync2
 $ rusync test/src test/dest
 :: Syncing from test/src to test/dest …
  50% 24/50 Downloads/archlinux.iso   00:01:30

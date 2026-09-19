@@ -1,4 +1,4 @@
-//! The `rusync2` command; an alias for `rusync`.
+//! The `rusync` command.
 
 fn main() -> anyhow::Result<()> {
     rusync::cli::run()

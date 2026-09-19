@@ -185,6 +185,23 @@ fn help_documents_the_new_features() {
     }
 }
 
+#[test]
+fn rusync2_is_also_installed_as_a_command() {
+    let mut cmd = Command::new(env!("CARGO_BIN_EXE_rusync2"));
+    let output = cmd
+        .arg("--help")
+        .output()
+        .expect("could not run the rusync2 binary");
+    assert!(output.status.success());
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(
+        stdout.contains("Minimalist rsync clone in Rust"),
+        "stdout was: {}",
+        stdout
+    );
+    assert!(stdout.contains("PATH MATCHING"), "stdout was: {}", stdout);
+}
+
 fn spawn_watch(src: &Path, dest: &Path, interval: &str) -> std::process::Child {
     Command::new(env!("CARGO_BIN_EXE_rusync"))
         .arg("--sleep-interval")

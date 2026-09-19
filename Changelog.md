@@ -1,4 +1,8 @@
-# Unreleased
+# 0.8.0
+
+* Fork of the unmaintained [rusync](https://github.com/dmerejkowsky/rusync),
+  published to crates.io as `rusync2`. The package installs both the
+  `rusync` and the `rusync2` commands; the library is unchanged.
 
 * Add `--include` and `--exclude` options. Both take regular expressions, can
   be repeated, and are matched against the path relative to the source
