@@ -152,6 +152,7 @@ impl ProgressWorker {
                         eta: compute_eta(elapsed.as_secs() as usize, stats.total_size, total_done),
                         current_speed,
                         average_speed: average_speed(total_done, elapsed),
+                        elapsed: elapsed.as_secs() as usize,
                     };
                     self.progress_info.progress(&detailed_progress);
                 }
@@ -180,6 +181,7 @@ impl ProgressWorker {
                         eta: compute_eta(elapsed.as_secs() as usize, stats.total_size, total_done),
                         current_speed,
                         average_speed: average_speed(total_done, elapsed),
+                        elapsed: elapsed.as_secs() as usize,
                     };
                     self.progress_info.progress(&detailed_progress);
                 }

@@ -13,7 +13,8 @@ the `rusync2` commands.
 $ cargo install rusync2
 $ rusync test/src test/dest
 :: Syncing from test/src to test/dest …
- 50% 24/50 Downloads/archlinux.iso   00:01:30
+scanning … 42 entries, 24 to sync
+ 50% 13/24 Downloads/archlinux.iso 1.07 GB 1.18 GB/s avg 1.16 GB/s elapsed 00:01:23 eta 00:00:05
 ```
 
 # Caveat
@@ -29,8 +30,10 @@ Thank you for your understanding!
 * Easy to remember command line syntax.
 
 * Print progress on one line at every stage — while scanning the source
-  tree, while comparing files, and while copying — and erase it when
-  done, thus avoiding flooding your terminal with useless noise.
+  tree, while comparing files, and while copying — with the transferred
+  size, the current and average speed, and the elapsed time of the
+  current run, and erase it when done, thus avoiding flooding your
+  terminal with useless noise.
 
 * Displays a reliable ETA, without sacrificing speed.
 

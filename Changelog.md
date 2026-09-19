@@ -1,3 +1,16 @@
+# Unreleased
+
+* Show the elapsed time of the current sync run and the amount of data
+  transferred so far — human-friendly sizes (KB, MB, GB, bytes — not bits)
+  — in the progress line:
+
+  ```
+   50% 13/24 Downloads/archlinux.iso 1.07 GB 1.18 GB/s avg 1.16 GB/s elapsed 00:01:23 eta 00:00:05
+  ```
+
+  In watch mode, both reset at every sync round. For library users, the
+  `Progress` struct gained an `elapsed` field (seconds).
+
 # 0.10.0
 
 * Show the current transfer speed and the average speed since the start

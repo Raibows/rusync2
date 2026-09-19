@@ -238,6 +238,16 @@ fn progress_is_shown_at_every_stage() {
         stdout
     );
     assert!(
+        stdout.contains("elapsed "),
+        "elapsed time display missing, stdout was: {}",
+        stdout
+    );
+    assert!(
+        stdout.contains("eta "),
+        "eta label missing, stdout was: {}",
+        stdout
+    );
+    assert!(
         stdout.contains("(avg"),
         "average speed missing from the summary, stdout was: {}",
         stdout

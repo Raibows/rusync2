@@ -131,36 +131,7 @@ impl ProgressInfo for ConsoleProgressInfo {
         if !self.should_render() {
             return;
         }
-        let eta_str = human_seconds(progress.eta);
-        let speed_str = human_speed(progress.current_speed);
-        let avg_str = format!("avg {}", human_speed(progress.average_speed));
-        let percent_width = 3;
-        let eta_width = eta_str.len();
-        let speed_width = speed_str.len();
-        let avg_width = avg_str.len();
-        let index = progress.index;
-        let index_width = index.to_string().len();
-        let num_files = progress.num_files;
-        let num_files_width = num_files.to_string().len();
-        let widgets_width =
-            percent_width + index_width + num_files_width + eta_width + speed_width + avg_width;
-        let num_separators = 7;
-        let line_width = get_terminal_width();
-        let file_width = line_width
-            .saturating_sub(widgets_width + num_separators + 1)
-            .max(8);
-        let current_file = progress.current_file.clone();
-        let current_file = truncate_lossy(&current_file, file_width);
-        let current_file = format!(
-            "{filename:<pad$}",
-            pad = file_width,
-            filename = current_file
-        );
-        let file_percent = (progress.file_done * 100) / progress.file_size.max(1);
-        print!(
-            "{:>3}% {}/{} {} {} {} {}\r",
-            file_percent, index, num_files, current_file, speed_str, avg_str, eta_str
-        );
+        print!("{}", progress_line(progress));
         let _ = io::stdout().flush();
         self.line_dirty = true;
     }
@@ -291,6 +262,57 @@ fn scanning_line(info: &WalkInfo) -> String {
     line
 }
 
+/// The transfer progress line, ending with `\r` so that it overwrites
+/// the previous line.
+fn progress_line(progress: &Progress) -> String {
+    let done_str = progress
+        .total_done
+        .file_size(options::DECIMAL)
+        .unwrap_or_default();
+    let speed_str = human_speed(progress.current_speed);
+    let avg_str = format!("avg {}", human_speed(progress.average_speed));
+    let elapsed_str = format!("elapsed {}", human_seconds(progress.elapsed));
+    let eta_str = format!("eta {}", human_seconds(progress.eta));
+    let percent_width = 3;
+    let index = progress.index;
+    let index_width = index.to_string().len();
+    let num_files = progress.num_files;
+    let num_files_width = num_files.to_string().len();
+    let widgets_width = percent_width
+        + index_width
+        + num_files_width
+        + done_str.len()
+        + speed_str.len()
+        + avg_str.len()
+        + elapsed_str.len()
+        + eta_str.len();
+    // One space between each of the nine fields, plus some margin:
+    let num_separators = 10;
+    let line_width = get_terminal_width();
+    let file_width = line_width
+        .saturating_sub(widgets_width + num_separators + 1)
+        .max(8);
+    let current_file = truncate_lossy(&progress.current_file, file_width);
+    let current_file = format!(
+        "{filename:<pad$}",
+        pad = file_width,
+        filename = current_file
+    );
+    let file_percent = (progress.file_done * 100) / progress.file_size.max(1);
+    format!(
+        "{:>3}% {}/{} {} {} {} {} {} {}\r",
+        file_percent,
+        index,
+        num_files,
+        current_file,
+        done_str,
+        speed_str,
+        avg_str,
+        elapsed_str,
+        eta_str
+    )
+}
+
 /// Format a speed in bytes per second.
 fn human_speed(bytes_per_second: usize) -> String {
     format!(
@@ -397,6 +419,32 @@ mod test {
         assert_eq!(human_speed(0), "0 B/s");
         assert_eq!(human_speed(1024), "1.02 KB/s");
         assert_eq!(human_speed(12500000), "12.50 MB/s");
+    }
+
+    #[test]
+    fn test_progress_line() {
+        let progress = Progress {
+            current_file: String::from("big.bin"),
+            file_done: 50,
+            file_size: 100,
+            total_done: 1070000000,
+            total_size: 2000000000,
+            index: 1,
+            num_files: 3,
+            eta: 5,
+            current_speed: 1180000000,
+            average_speed: 1160000000,
+            elapsed: 83,
+        };
+        let line = progress_line(&progress);
+        assert!(line.contains("50% 1/3"), "line was: {}", line);
+        // Transferred size, human-friendly, bytes not bits:
+        assert!(line.contains("1.07 GB"), "line was: {}", line);
+        assert!(line.contains("1.18 GB/s"), "line was: {}", line);
+        assert!(line.contains("avg 1.16 GB/s"), "line was: {}", line);
+        // Elapsed time of the current run and eta, both labeled:
+        assert!(line.contains("elapsed 00:01:23"), "line was: {}", line);
+        assert!(line.contains("eta 00:00:05"), "line was: {}", line);
     }
 
     #[test]

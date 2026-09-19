@@ -68,6 +68,8 @@ pub struct Progress {
     pub current_speed: usize,
     /// Average transfer speed since the start of the run, in bytes per second
     pub average_speed: usize,
+    /// Time elapsed since the start of the current sync run, in seconds
+    pub elapsed: usize,
 }
 
 /// Trait for implementing rusync progress details
