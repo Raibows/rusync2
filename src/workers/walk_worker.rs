@@ -11,6 +11,9 @@ use crate::filters::Filters;
 use crate::fsops;
 use crate::progress::ProgressMessage;
 
+/// Number of entries between two `Walk` progress snapshots
+const WALK_UPDATE_INTERVAL: u64 = 32;
+
 pub struct WalkWorker {
     entry_output: Sender<Entry>,
     progress_output: Sender<ProgressMessage>,
@@ -33,10 +36,23 @@ impl WalkWorker {
         }
     }
 
-    fn send_excluded(&self, is_dir: bool) -> Result<(), Error> {
-        let sent = self
-            .progress_output
-            .send(ProgressMessage::Excluded { is_dir });
+    fn send_walk(
+        &self,
+        seen: u64,
+        num_files: u64,
+        total_size: usize,
+        excluded_files: u64,
+        excluded_dirs: u64,
+        finished: bool,
+    ) -> Result<(), Error> {
+        let sent = self.progress_output.send(ProgressMessage::Walk {
+            seen,
+            num_files,
+            total_size,
+            excluded_files,
+            excluded_dirs,
+            finished,
+        });
         if sent.is_err() {
             bail!("stats output chan is closed");
         }
@@ -44,9 +60,12 @@ impl WalkWorker {
     }
 
     fn walk(&self) -> Result<(), Error> {
-        let mut num_files = 0;
-        let mut total_size = 0;
         let mut subdirs: Vec<PathBuf> = vec![self.source.to_path_buf()];
+        let mut seen: u64 = 0;
+        let mut num_files: u64 = 0;
+        let mut total_size: usize = 0;
+        let mut excluded_files: u64 = 0;
+        let mut excluded_dirs: u64 = 0;
         while let Some(subdir) = subdirs.pop() {
             // We just checked that subdirs is *not* empty, so calling pop() is safe
 
@@ -64,44 +83,88 @@ impl WalkWorker {
                     )
                 })?;
                 let path = entry.path();
-                let rel_path = fsops::get_rel_path(&path, &self.source);
-                if path.is_dir() {
-                    if self.filters.dir_pruned(&rel_path) {
-                        self.send_excluded(true)?;
-                        continue;
-                    }
-                    subdirs.push(path);
+                // `file_type()` comes from the directory entry itself on
+                // most platforms; only symlinks need an extra stat, to
+                // preserve the "follow symlinks to directories" behavior.
+                let file_type = entry.file_type().with_context(|| {
+                    format!(
+                        "While walking source, could not read the type of '{}'",
+                        path.display()
+                    )
+                })?;
+                let is_dir = if file_type.is_symlink() {
+                    path.is_dir()
                 } else {
-                    if !self.filters.passes(&rel_path) {
-                        self.send_excluded(false)?;
-                        continue;
+                    file_type.is_dir()
+                };
+                let rel_path = fsops::get_rel_path(&path, &self.source);
+                if is_dir {
+                    if self.filters.dir_pruned(&rel_path) {
+                        excluded_dirs += 1;
+                    } else {
+                        subdirs.push(path);
                     }
-                    let meta = self.process_file(&rel_path, &entry)?;
+                } else if self.filters.passes(&rel_path) {
+                    let size = self.process_file(&rel_path, &entry)?;
                     num_files += 1;
-                    total_size += meta.len();
-                    let sent = self.progress_output.send(ProgressMessage::Todo {
+                    total_size += size;
+                } else {
+                    excluded_files += 1;
+                }
+                seen += 1;
+                if seen.is_multiple_of(WALK_UPDATE_INTERVAL) {
+                    self.send_walk(
+                        seen,
                         num_files,
-                        total_size: total_size as usize,
-                    });
-                    if sent.is_err() {
-                        bail!("stats output chan is closed");
-                    }
+                        total_size,
+                        excluded_files,
+                        excluded_dirs,
+                        false,
+                    )?;
                 }
             }
         }
+        // Final updates: one snapshot so that the scanning line is displayed
+        // at least once even on small trees, then a message marking the scan
+        // as finished so that the scanning line can be erased.
+        self.send_walk(
+            seen,
+            num_files,
+            total_size,
+            excluded_files,
+            excluded_dirs,
+            false,
+        )?;
+        self.send_walk(
+            seen,
+            num_files,
+            total_size,
+            excluded_files,
+            excluded_dirs,
+            true,
+        )?;
         Ok(())
     }
 
-    fn process_file(&self, rel_path: &Path, entry: &DirEntry) -> Result<fs::Metadata, Error> {
+    fn process_file(&self, rel_path: &Path, entry: &DirEntry) -> Result<usize, Error> {
         let desc = rel_path.to_string_lossy();
-        let src_entry = Entry::new(&desc, &entry.path());
+        let path = entry.path();
+        // Fast path for regular files: reuse the metadata that the
+        // directory entry already read (one syscall on platforms where
+        // `DirEntry::metadata()` is not cached).
+        let src_entry = match entry.metadata() {
+            Ok(metadata) if !metadata.file_type().is_symlink() => {
+                Entry::regular_file(&desc, &path, metadata)
+            }
+            _ => Entry::new(&desc, &path),
+        };
         let metadata = src_entry
             .metadata()
-            .with_context(|| format!("Could not read metadata from {:?}", entry.path()))?;
+            .with_context(|| format!("Could not read metadata from {:?}", path))?;
         self.entry_output
             .send(src_entry.clone())
             .with_context(|| "When walking source dir: could not send entry to progress worker")?;
-        Ok(metadata.clone())
+        Ok(metadata.len() as usize)
     }
 
     pub fn start(&self) {

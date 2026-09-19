@@ -202,6 +202,50 @@ fn rusync2_is_also_installed_as_a_command() {
     assert!(stdout.contains("PATH MATCHING"), "stdout was: {}", stdout);
 }
 
+#[test]
+fn progress_is_shown_at_every_stage() {
+    let tmp_dir = TempDir::new().unwrap();
+    let (src_path, dest_path) = make_tree(tmp_dir.path());
+    let src_str = src_path.to_str().unwrap();
+    let dest_str = dest_path.to_str().unwrap();
+    // First run: header, scanning line and summary are all displayed:
+    let output = rusync(&[src_str, dest_str]);
+    assert!(output.status.success());
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(
+        stdout.contains("Syncing from"),
+        "start header missing, stdout was: {}",
+        stdout
+    );
+    assert!(
+        stdout.contains("scanning"),
+        "scanning line missing, stdout was: {}",
+        stdout
+    );
+    assert!(
+        stdout.contains("up to date"),
+        "summary missing, stdout was: {}",
+        stdout
+    );
+    // Second run, everything up to date: the header, the scanning line
+    // and the per-file progress are still displayed:
+    let output = rusync(&[src_str, dest_str]);
+    assert!(output.status.success());
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("Syncing from"), "stdout was: {}", stdout);
+    assert!(stdout.contains("scanning"), "stdout was: {}", stdout);
+    assert!(
+        stdout.contains("0% 1/"),
+        "per-file progress missing, stdout was: {}",
+        stdout
+    );
+    assert!(
+        stdout.contains("4 up to date"),
+        "summary missing, stdout was: {}",
+        stdout
+    );
+}
+
 fn spawn_watch(src: &Path, dest: &Path, interval: &str) -> std::process::Child {
     Command::new(env!("CARGO_BIN_EXE_rusync"))
         .arg("--sleep-interval")

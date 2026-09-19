@@ -28,10 +28,14 @@ Thank you for your understanding!
 
 * Easy to remember command line syntax.
 
-* Print progress on one line, and erase it when done, thus avoiding flooding your terminal
-  with useless noise.
+* Print progress on one line at every stage — while scanning the source
+  tree, while comparing files, and while copying — and erase it when
+  done, thus avoiding flooding your terminal with useless noise.
 
 * Displays a reliable ETA, without sacrificing speed.
+
+* Few syscalls per entry, so that syncing trees with many small files
+  stays fast.
 
 * Unsurprising behavior: missing directories are created
   on the fly, files are only copied if:

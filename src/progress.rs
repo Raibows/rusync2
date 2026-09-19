@@ -4,10 +4,21 @@ use crate::sync::Stats;
 #[doc(hidden)]
 pub enum ProgressMessage {
     DoneSyncing(SyncOutcome),
-    StartSync(String),
-    Todo {
+    StartSync {
+        description: String,
+        size: usize,
+    },
+    /// Snapshot of the source tree scan. Counts are absolute values,
+    /// sent every `WALK_UPDATE_INTERVAL` entries and twice at the end
+    /// (once without `finished`, then with it, so that the scanning
+    /// progress line is displayed at least once, then erased).
+    Walk {
+        seen: u64,
         num_files: u64,
         total_size: usize,
+        excluded_files: u64,
+        excluded_dirs: u64,
+        finished: bool,
     },
     Syncing {
         description: String,
@@ -18,9 +29,21 @@ pub enum ProgressMessage {
         entry: String,
         details: String,
     },
-    Excluded {
-        is_dir: bool,
-    },
+}
+
+/// Progress of the scan of the source tree.
+#[derive(Debug)]
+pub struct WalkInfo {
+    /// Number of entries seen so far (files and directories)
+    pub seen: u64,
+    /// Number of files that passed the filters so far
+    pub num_files: u64,
+    /// Files excluded by the filters so far
+    pub excluded_files: u64,
+    /// Directories pruned by the filters so far
+    pub excluded_dirs: u64,
+    /// Whether the scan is finished
+    pub finished: bool,
 }
 
 pub struct Progress {
@@ -48,6 +71,10 @@ pub trait ProgressInfo {
     /// directory
     #[allow(unused_variables)]
     fn start(&mut self, source: &str, destination: &str) {}
+
+    /// The source tree is being scanned
+    #[allow(unused_variables)]
+    fn scanning(&mut self, info: &WalkInfo) {}
 
     /// A new file named `name` is being transfered
     #[allow(unused_variables)]

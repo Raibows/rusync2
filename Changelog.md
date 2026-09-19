@@ -24,6 +24,18 @@
   source/destination arguments, and the path matching and watch mode
   semantics.
 
+* Show progress at every stage: a scanning line while the source tree is
+  walked (with the number of entries seen and skipped by filters), a
+  per-file line while files are compared — so that a run where everything
+  is up to date still shows progress — and the `:: Syncing from …` header
+  line, which was previously never printed.
+
+* Speed up syncing trees with many small files: one `lstat` per entry
+  instead of up to three, file types read from the directory entry,
+  destination directories created once per directory instead of once per
+  file, a reused copy buffer, and progress rendering throttled to 10
+  frames per second instead of one write per event.
+
 # 0.7.2
 
 * Update dependencies

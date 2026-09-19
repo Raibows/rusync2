@@ -14,7 +14,7 @@ use filetime::FileTime;
 use crate::entry::Entry;
 use crate::progress::ProgressMessage;
 
-const BUFFER_SIZE: usize = 100 * 1024;
+pub(crate) const BUFFER_SIZE: usize = 100 * 1024;
 
 #[derive(PartialEq, Eq, Debug)]
 pub enum SyncOutcome {
@@ -134,6 +134,7 @@ pub fn copy_entry(
     progress_sender: &mpsc::Sender<ProgressMessage>,
     src: &Entry,
     dest: &Entry,
+    buffer: &mut [u8],
 ) -> Result<SyncOutcome, Error> {
     let src_path = src.path();
     let mut src_file = File::open(src_path)
@@ -143,10 +144,9 @@ pub fn copy_entry(
     let dest_path = dest.path();
     let mut dest_file = File::create(dest_path)
         .with_context(|| format!("Could not open '{}' for writing", dest.description()))?;
-    let mut buffer = vec![0; BUFFER_SIZE];
     loop {
         let num_read = src_file
-            .read(&mut buffer)
+            .read(buffer)
             .with_context(|| format!("Could not read from '{}'", src.description()))?;
         if num_read == 0 {
             break;
@@ -177,8 +177,13 @@ pub fn sync_entries(
     progress_sender: &mpsc::Sender<ProgressMessage>,
     src: &Entry,
     dest: &Entry,
+    buffer: &mut [u8],
 ) -> Result<SyncOutcome, Error> {
-    let _ = progress_sender.send(ProgressMessage::StartSync(src.description().to_string()));
+    let size = src.metadata().map(|meta| meta.len()).unwrap_or(0);
+    let _ = progress_sender.send(ProgressMessage::StartSync {
+        description: src.description().to_string(),
+        size: size as usize,
+    });
     let is_link = src.is_link().expect("src.is_link should not be None");
     if is_link {
         return copy_link(src, dest);
@@ -187,7 +192,7 @@ pub fn sync_entries(
     let more_recent = is_more_recent_than(src, dest);
     // TODO: check if files really are different ?
     if more_recent || different_size {
-        return copy_entry(progress_sender, src, dest);
+        return copy_entry(progress_sender, src, dest, buffer);
     }
     Ok(SyncOutcome::UpToDate)
 }
@@ -210,7 +215,8 @@ mod tests {
         let dest_entry = Entry::new("dest.txt", dest);
 
         let (progress_output, _) = channel::<ProgressMessage>();
-        sync_entries(&progress_output, &src_entry, &dest_entry).unwrap();
+        let mut buffer = vec![0; BUFFER_SIZE];
+        sync_entries(&progress_output, &src_entry, &dest_entry, &mut buffer).unwrap();
 
         let actual = std::fs::read_to_string(dest)?;
         assert_eq!(actual, contents);
@@ -231,7 +237,8 @@ mod tests {
         std::fs::write(dest, old_contents)?;
 
         let (progress_output, _) = channel::<ProgressMessage>();
-        sync_entries(&progress_output, &src_entry, &dest_entry).unwrap();
+        let mut buffer = vec![0; BUFFER_SIZE];
+        sync_entries(&progress_output, &src_entry, &dest_entry, &mut buffer).unwrap();
 
         let actual = std::fs::read_to_string(dest)?;
         assert_eq!(actual, new_contents);

@@ -2,7 +2,7 @@
 //!
 //! Display transfer progress to the command line
 
-use crate::progress::{Progress, ProgressInfo};
+use crate::progress::{Progress, ProgressInfo, WalkInfo};
 use crate::sync;
 use anyhow::{Context, Error};
 use colored::Colorize;
@@ -16,14 +16,27 @@ use std::time::Duration;
 use std::time::Instant;
 use terminal_size::{terminal_size, Width};
 
+/// Minimum delay between two rendered progress lines. Rendering on every
+/// event is both slow (terminal writes) and flickery; for trees with many
+/// small files the events come in thousands per second.
+const MIN_RENDER_INTERVAL: Duration = Duration::from_millis(100);
+
 #[derive(Debug)]
 pub struct ConsoleProgressInfo {
     err_file: Option<std::fs::File>,
+    last_render: Option<Instant>,
+    last_scan_render: Option<Instant>,
+    line_dirty: bool,
 }
 
 impl ConsoleProgressInfo {
     pub fn new() -> Self {
-        Self { err_file: None }
+        Self {
+            err_file: None,
+            last_render: None,
+            last_scan_render: None,
+            line_dirty: false,
+        }
     }
 
     pub fn with_error_list_path(error_list_path: &Path) -> Result<Self, Error> {
@@ -37,13 +50,50 @@ impl ConsoleProgressInfo {
             })?;
         Ok(Self {
             err_file: Some(err_file),
+            last_render: None,
+            last_scan_render: None,
+            line_dirty: false,
         })
+    }
+
+    /// Whether a transfer progress line should be rendered now; also
+    /// updates the render clock. The first line is always rendered.
+    fn should_render(&mut self) -> bool {
+        let ready = match self.last_render {
+            None => true,
+            Some(last) => last.elapsed() >= MIN_RENDER_INTERVAL,
+        };
+        if ready {
+            self.last_render = Some(Instant::now());
+        }
+        ready
+    }
+
+    /// Same as `should_render`, but for the scanning line, so that a busy
+    /// transfer phase cannot starve the scanning display (and the first
+    /// scanning line is always rendered).
+    fn should_render_scan(&mut self) -> bool {
+        let ready = match self.last_scan_render {
+            None => true,
+            Some(last) => last.elapsed() >= MIN_RENDER_INTERVAL,
+        };
+        if ready {
+            self.last_scan_render = Some(Instant::now());
+        }
+        ready
+    }
+
+    fn erase_line_if_dirty(&mut self) {
+        if self.line_dirty {
+            erase_line();
+            self.line_dirty = false;
+        }
     }
 }
 
 impl ProgressInfo for ConsoleProgressInfo {
     fn done_syncing(&mut self) {
-        erase_line();
+        self.erase_line_if_dirty();
     }
 
     fn start(&mut self, source: &str, destination: &str) {
@@ -57,7 +107,30 @@ impl ProgressInfo for ConsoleProgressInfo {
 
     fn new_file(&mut self, _name: &str) {}
 
+    fn scanning(&mut self, info: &WalkInfo) {
+        if info.finished {
+            self.erase_line_if_dirty();
+            return;
+        }
+        if !self.should_render_scan() {
+            return;
+        }
+        // Pad to the terminal width so that a previous, longer progress
+        // line is fully overwritten:
+        let line = format!(
+            "{:<width$}",
+            scanning_line(info),
+            width = get_terminal_width()
+        );
+        print!("{}\r", line);
+        let _ = io::stdout().flush();
+        self.line_dirty = true;
+    }
+
     fn progress(&mut self, progress: &Progress) {
+        if !self.should_render() {
+            return;
+        }
         let eta_str = human_seconds(progress.eta);
         let percent_width = 3;
         let eta_width = eta_str.len();
@@ -76,12 +149,13 @@ impl ProgressInfo for ConsoleProgressInfo {
             pad = file_width,
             filename = current_file
         );
-        let file_percent = (progress.file_done * 100) / progress.file_size;
+        let file_percent = (progress.file_done * 100) / progress.file_size.max(1);
         print!(
             "{:>3}% {}/{} {} {:<}\r",
             file_percent, index, num_files, current_file, eta_str
         );
         let _ = io::stdout().flush();
+        self.line_dirty = true;
     }
 
     fn error(&mut self, entry: &str, desc: &str) {
@@ -189,6 +263,21 @@ pub fn sleep_with_progress(interval: Duration, next_sync_at: &str) {
     erase_line();
 }
 
+/// The line displayed while the source tree is being scanned.
+fn scanning_line(info: &WalkInfo) -> String {
+    let mut line = format!(
+        "scanning … {} entries, {} to sync",
+        info.seen, info.num_files
+    );
+    if info.excluded_files > 0 || info.excluded_dirs > 0 {
+        line.push_str(&format!(
+            ", {} skipped by filters",
+            info.excluded_files + info.excluded_dirs
+        ));
+    }
+    line
+}
+
 fn get_terminal_width() -> usize {
     if let Some((Width(w), _)) = terminal_size() {
         return w as usize;
@@ -232,6 +321,33 @@ mod test {
     fn test_truncate_string() {
         let new_text = truncate_lossy("ééé", 2);
         assert_eq!(new_text, "é");
+    }
+
+    #[test]
+    fn scanning_line_without_filters() {
+        let info = WalkInfo {
+            seen: 12,
+            num_files: 10,
+            excluded_files: 0,
+            excluded_dirs: 0,
+            finished: false,
+        };
+        assert_eq!(scanning_line(&info), "scanning … 12 entries, 10 to sync");
+    }
+
+    #[test]
+    fn scanning_line_with_filters() {
+        let info = WalkInfo {
+            seen: 15,
+            num_files: 10,
+            excluded_files: 2,
+            excluded_dirs: 1,
+            finished: false,
+        };
+        assert_eq!(
+            scanning_line(&info),
+            "scanning … 15 entries, 10 to sync, 3 skipped by filters"
+        );
     }
 
     #[test]

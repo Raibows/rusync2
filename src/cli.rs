@@ -14,6 +14,7 @@ use crate::console_info::sleep_with_progress;
 use crate::console_info::ConsoleProgressInfo;
 use crate::duration::parse_duration;
 use crate::filters::Filters;
+use crate::progress::ProgressInfo;
 use crate::sync::Stats;
 use crate::sync::SyncOptions;
 use crate::sync::Syncer;
@@ -98,10 +99,14 @@ fn make_options(opt: &Opt) -> Result<SyncOptions, Error> {
 }
 
 fn sync_once(opt: &Opt, options: &SyncOptions) -> Result<Stats, Error> {
-    let console_info = match &opt.error_list_path {
+    let mut console_info = match &opt.error_list_path {
         Some(err_file) => ConsoleProgressInfo::with_error_list_path(err_file)?,
         None => ConsoleProgressInfo::new(),
     };
+    console_info.start(
+        &opt.source.to_string_lossy(),
+        &opt.destination.to_string_lossy(),
+    );
     let syncer = Syncer::new(
         &opt.source,
         &opt.destination,
